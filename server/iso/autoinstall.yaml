@@ -8,7 +8,7 @@ autoinstall:
     username: rictedesco
     password: "$y$j9T$uhkxlm8nUQaNu.6rl4k2d.$DIldpYy96OHg8lFjfXfc671BZcGWkPOmaDONGAhGSg3"
 
-  # locale: pt_BR.UTF-8
+  locale: pt_BR.UTF-8
   keyboard:
     layout: br
 
@@ -21,7 +21,64 @@ autoinstall:
     - wget
     - timeshift
 
-  
+  storage:
+    layout:
+      name: direct
+    config:
+      - id: disk0
+        type: disk
+        match:
+          size: largest
+        ptable: gpt
+        wipe: superblock
+        preserve: false
+
+      - id: part-efi
+        type: partition
+        device: disk0
+        size: 1000M
+        flag: boot
+
+      - id: part-boot
+        type: partition
+        device: disk0
+        size: 1000M
+
+      - id: part-root
+        type: partition
+        device: disk0
+        size: -1
+
+      - id: fs-efi
+        type: format
+        fstype: fat32
+        volume: part-efi
+
+      - id: fs-boot
+        type: format
+        fstype: ext4
+        volume: part-boot
+
+      - id: fs-root
+        type: format
+        fstype: btrfs
+        volume: part-root
+
+      - id: mnt-efi
+        type: mount
+        path: /boot/efi
+        device: fs-efi
+
+      - id: mnt-boot
+        type: mount
+        path: /boot
+        device: fs-boot
+
+      - id: mnt-root
+        type: mount
+        path: /
+        device: fs-root
+
   late-commands:
     # 1 — Criar subvolumes Btrfs
     - curtin in-target -- bash -c "

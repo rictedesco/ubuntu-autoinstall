@@ -1,0 +1,71 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  identity:
+    realname: "Ricardo"
+    hostname: ubuntu-desktop
+    username: rictedesco
+    password: "$y$j9T$uhkxlm8nUQaNu.6rl4k2d.$DIldpYy96OHg8lFjfXfc671BZcGWkPOmaDONGAhGSg3"
+
+  locale: pt_BR.UTF-8
+  keyboard:
+    layout: br
+
+  timezone: "America/Sao_Paulo"
+
+  updates: all
+
+  packages:
+    - git
+    - wget
+    - timeshift
+
+  
+  late-commands:
+    # 1 — Criar subvolumes Btrfs
+    - curtin in-target -- bash -c "
+        mount -o subvol=/ /dev/disk/by-uuid/$(blkid -s UUID -o value /dev/disk/by-label/* | head -n1) /mnt &&
+        btrfs subvolume create /mnt/@ &&
+        btrfs subvolume create /mnt/@home &&
+        btrfs subvolume create /mnt/@swap &&
+        btrfs subvolume create /mnt/@fileshare &&
+        btrfs subvolume create /mnt/@log &&
+        btrfs subvolume create /mnt/@cache &&
+        btrfs subvolume create /mnt/@libvirt &&
+        btrfs subvolume create /mnt/@vmware &&
+        btrfs subvolume create /mnt/@tmp &&
+        umount /mnt
+      "
+
+    # 2 — Criar arquivo de swap no subvolume @swap
+    - curtin in-target -- bash -c "
+        mount -o subvol=@swap / /mnt &&
+        btrfs filesystem mkswapfile --size 24G /mnt/swapfile &&
+        umount /mnt
+      "
+
+    # 3 — Desabilitar COW para diretórios libvirt e vmware
+    - curtin in-target -- bash -c "
+        mkdir -p /var/lib/libvirt /var/lib/vmware &&
+        chattr +C /var/lib/libvirt &&
+        chattr +C /var/lib/vmware
+      "
+
+    # 4 — Reescrever FSTAB completo
+    - curtin in-target -- bash -c "
+        ROOTUUID=\$(blkid -s UUID -o value /dev/disk/by-partlabel/part-root) &&
+        cat <<EOF > /etc/fstab
+UUID=\$ROOTUUID  /                btrfs  subvol=@,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+UUID=\$ROOTUUID  /home            btrfs  subvol=@home,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+UUID=\$ROOTUUID  /swap/swapfile   none   swap  defaults  0 0
+UUID=\$ROOTUUID  /user/fileshare  btrfs  subvol=@fileshare,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+UUID=\$ROOTUUID  /var/log         btrfs  subvol=@log,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+UUID=\$ROOTUUID  /var/cache       btrfs  subvol=@cache,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+UUID=\$ROOTUUID  /var/lib/libvirt btrfs  subvol=@libvirt,defaults,ssd,discard=async,noatime,space_cache=v2  0 0
+UUID=\$ROOTUUID  /var/lib/vmware  btrfs  subvol=@vmware,defaults,ssd,discard=async,noatime,space_cache=v2  0 0
+UUID=\$ROOTUUID  /var/tmp         btrfs  subvol=@tmp,defaults,ssd,discard=async,noatime,space_cache=v2,compress=zstd:1  0 0
+EOF
+      "
+
+  shutdown: reboot
